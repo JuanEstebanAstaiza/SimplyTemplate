@@ -1,0 +1,293 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Rol {
+  ADMINISTRADOR
+  EDITOR
+  REVISOR
+  AUDITOR
+}
+
+enum EstadoPlantilla {
+  BORRADOR
+  ACTIVA
+  CERRADA
+}
+
+enum EstadoFolio {
+  PENDIENTE_FIRMA
+  VIGENTE
+  RECHAZADO
+}
+
+enum TipoFolio {
+  CREACION
+  IMPORTACION
+  EDICION
+  REVERSION
+  EXTENSION_VIGENCIA
+  ACTIVACION
+  CIERRE
+}
+
+enum TipoAviso {
+  RADICACION
+  DEVOLUCION
+  CONTRAFIRMA_PENDIENTE
+  CONTRAFIRMA
+  RECHAZO
+}
+
+enum EstadoPresencia {
+  EN_LINEA
+  INACTIVO
+  AUSENTE
+  DESCONECTADO
+}
+
+model Entidad {
+  id             String   @id @default(cuid())
+  nombre         String
+  nit            String
+  nivel          String
+  municipio      String   @default("")
+  departamento   String   @default("")
+  minutosEnLinea Int      @default(2)
+  minutosAusente Int      @default(15)
+  creadaEn       DateTime @default(now())
+}
+
+model Usuario {
+  id           String   @id @default(cuid())
+  cedula       String   @unique
+  nombre       String
+  correo       String   @unique
+  cargo        String
+  dependencia  String
+  rol          Rol
+  passwordHash String
+  fotoId       String?
+  activo       Boolean  @default(true)
+  creadoEn     DateTime @default(now())
+}
+
+model Periodo {
+  id          String      @id @default(cuid())
+  nombre      String
+  nivel       String
+  fechaInicio DateTime
+  fechaFin    DateTime
+  mandatario  String      @default("")
+  plantillas  Plantilla[]
+}
+
+model Plantilla {
+  id                  String          @id @default(cuid())
+  periodoId           String?
+  periodo             Periodo?        @relation(fields: [periodoId], references: [id])
+  nombre              String
+  descripcion         String          @default("")
+  vigenciaInicio      DateTime
+  vigenciaFin         DateTime
+  estado              EstadoPlantilla @default(BORRADOR)
+  exigeContrafirma    Boolean         @default(false)
+  headFolioId         String?
+  creadoPorId         String
+  libroOriginalId     String?
+  libroOriginalNombre String          @default("")
+  tieneMacros         Boolean         @default(false)
+  tieneTablaDinamica  Boolean         @default(false)
+  creadaEn            DateTime        @default(now())
+  folios              Folio[]
+  borradores          Borrador[]
+  asignaciones        Asignacion[]
+}
+
+model Asignacion {
+  id          String    @id @default(cuid())
+  plantillaId String
+  plantilla   Plantilla @relation(fields: [plantillaId], references: [id], onDelete: Cascade)
+  usuarioId   String
+  hojaId      String
+  eje         String
+  refId       String
+  titulo      String    @default("")
+
+  @@unique([plantillaId, usuarioId, hojaId, eje, refId])
+  @@index([plantillaId, hojaId, eje, refId])
+}
+
+model Folio {
+  id               String           @id @default(cuid())
+  plantillaId      String
+  plantilla        Plantilla        @relation(fields: [plantillaId], references: [id], onDelete: Cascade)
+  numero           Int
+  padreId          String?
+  autorId          String
+  cedula           String
+  nombreAutor      String
+  cargoAutor       String
+  dependenciaAutor String
+  creadoEn         DateTime         @default(now())
+  tipo             TipoFolio
+  resumen          String
+  justificacion    String           @default("")
+  revierteFolioId  String?
+  hashEstado       String
+  hashFolio        String
+  hashAnterior     String
+  estado           EstadoFolio
+  mongoEstadoId    String
+  mongoFirmaId     String
+  firmaSellada     Boolean          @default(false)
+  presenciaEstado  String           @default("")
+  operaciones      FolioOperacion[]
+  firmas           FirmaRef[]
+  soportes         SoporteMeta[]
+
+  @@unique([plantillaId, numero])
+  @@index([plantillaId, creadoEn])
+  @@index([cedula])
+}
+
+model FolioOperacion {
+  id              String        @id @default(cuid())
+  folioId         String
+  folio           Folio         @relation(fields: [folioId], references: [id], onDelete: Cascade)
+  orden           Int
+  tipo            String
+  hojaId          String        @default("")
+  filaId          String        @default("")
+  colId           String        @default("")
+  valorAnterior   String        @default("")
+  valorNuevo      String        @default("")
+  formulaAnterior String        @default("")
+  formulaNueva    String        @default("")
+  justificacion   String        @default("")
+  payload         Json?
+  soportes        SoporteMeta[]
+
+  @@index([folioId])
+}
+
+model Borrador {
+  id            String               @id @default(cuid())
+  plantillaId   String
+  plantilla     Plantilla            @relation(fields: [plantillaId], references: [id], onDelete: Cascade)
+  autorId       String
+  baseFolioId   String?
+  actualizadoEn DateTime             @updatedAt
+  operaciones   BorradorOperacion[]
+
+  @@unique([plantillaId, autorId])
+}
+
+model BorradorOperacion {
+  id            String        @id @default(cuid())
+  borradorId    String
+  borrador      Borrador      @relation(fields: [borradorId], references: [id], onDelete: Cascade)
+  orden         Int
+  tipo          String
+  hojaId        String        @default("")
+  filaId        String        @default("")
+  colId         String        @default("")
+  valorNuevo    String        @default("")
+  formulaNueva  String        @default("")
+  justificacion String        @default("")
+  payload       Json?
+  soportes      SoporteMeta[]
+
+  @@index([borradorId])
+}
+
+model SoporteMeta {
+  id             String             @id @default(cuid())
+  borradorOpId   String?
+  borradorOp     BorradorOperacion? @relation(fields: [borradorOpId], references: [id], onDelete: Cascade)
+  folioOpId      String?
+  folioOp        FolioOperacion?    @relation(fields: [folioOpId], references: [id], onDelete: Cascade)
+  folioId        String?
+  folio          Folio?             @relation(fields: [folioId], references: [id], onDelete: Cascade)
+  nombreOriginal String
+  mime           String
+  bytes          Int
+  sha256         String
+  gridfsId       String
+  subidoPorId    String
+  subidoEn       DateTime           @default(now())
+}
+
+model FirmaRef {
+  id          String   @id @default(cuid())
+  folioId     String
+  folio       Folio    @relation(fields: [folioId], references: [id], onDelete: Cascade)
+  usuarioId   String
+  rolFirma    String
+  mongoId     String
+  hashFirmado String
+  firmadoEn   DateTime @default(now())
+  sellada     Boolean  @default(false)
+
+  @@index([folioId])
+}
+
+model Aviso {
+  id          String         @id @default(cuid())
+  tipo        TipoAviso
+  actorId     String
+  plantillaId String?
+  folioId     String?
+  texto       String
+  cambios     Int            @default(0)
+  casillas    Int            @default(0)
+  creadoEn    DateTime       @default(now())
+  destinos    AvisoDestino[]
+
+  @@index([creadoEn])
+}
+
+model AvisoDestino {
+  id        String    @id @default(cuid())
+  avisoId   String
+  aviso     Aviso     @relation(fields: [avisoId], references: [id], onDelete: Cascade)
+  usuarioId String
+  leidoEn   DateTime?
+
+  @@unique([avisoId, usuarioId])
+  @@index([usuarioId, leidoEn])
+}
+
+model PresenciaActual {
+  usuarioId    String          @id
+  estado       EstadoPresencia
+  plantillaId  String          @default("")
+  ultimoLatido DateTime
+  desdeEn      DateTime
+}
+
+model PresenciaTramo {
+  id          String          @id @default(cuid())
+  usuarioId   String
+  estado      EstadoPresencia
+  plantillaId String          @default("")
+  inicio      DateTime
+  fin         DateTime?
+
+  @@index([usuarioId, inicio])
+}
+
+model Bitacora {
+  id        String   @id @default(cuid())
+  usuarioId String   @default("")
+  accion    String
+  detalle   String   @default("")
+  creadoEn  DateTime @default(now())
+
+  @@index([creadoEn])
+}
