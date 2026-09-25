@@ -103,6 +103,8 @@ export function EditorHoja({
   const [grosorBorde, setGrosorBorde] = useState<GrosorBorde>("fino");
   const [cedulaRevisor, setCedulaRevisor] = useState("");
   const [passwordRevisor, setPasswordRevisor] = useState("");
+  const [radicarAbierto, setRadicarAbierto] = useState(false);
+  const [radicarSale, setRadicarSale] = useState(false);
   const [resumenFolio, setResumenFolio] = useState("");
   const hoja = estado.hojas[hojaIndex] ?? estado.hojas[0];
 
@@ -410,6 +412,10 @@ export function EditorHoja({
         passwordRevisor,
         resumen: resumenFolio,
       });
+      setRadicarSale(true);
+      await new Promise((resolver) => setTimeout(resolver, 240));
+      setRadicarAbierto(false);
+      setRadicarSale(false);
       router.refresh();
       setCedulaRevisor("");
       setPasswordRevisor("");
@@ -425,7 +431,7 @@ export function EditorHoja({
       const destino = event.target as HTMLElement | null;
       const etiqueta = destino?.tagName;
       if (etiqueta === "INPUT" || etiqueta === "TEXTAREA" || etiqueta === "SELECT" || destino?.isContentEditable) return;
-      if (casilla || propuesta || dialogo || resumenAbierto) return;
+      if (casilla || propuesta || dialogo || resumenAbierto || radicarAbierto) return;
       const combo = eventoAAtajo(event);
       const accion = (Object.keys(mapa) as IdAtajo[]).find((id) => mapa[id] === combo);
       if (!accion) return;
@@ -776,51 +782,78 @@ export function EditorHoja({
           </table>
         </div> : null}
         <p className="mt-2 text-xs text-ink-soft">La primera casilla de cada columna es solo el título. Esas ramas aparecen en Auditoría.</p>
+        {mostrarRadicar ? (
+          <button
+            type="button"
+            className="mt-3 bg-indigo px-3 py-2 text-white"
+            disabled={lectura || ops.length === 0}
+            onClick={() => {
+              setRadicarSale(false);
+              setRadicarAbierto(true);
+            }}
+          >
+            Radicar cambios
+          </button>
+        ) : null}
       </div>
-      {mostrarRadicar ? <aside className="w-full shrink-0 border border-rule bg-card p-4 lg:w-96">
-        <h2 className="font-display text-2xl">Radicar cambios</h2>
-        <p className="mt-1 text-sm text-ink-soft">{ops.length ? `${ops.length} cambios sin radicar` : "La hoja no tiene cambios pendientes."}</p>
-        <ul className="mt-3 max-h-80 space-y-3 overflow-auto">
-          {ops.map((item) => {
-            const donde =
-              item.op.tipo === "SET_CELL"
-                ? `${indiceAColumna(hoja.colIds.indexOf(item.op.colId))}${hoja.filaIds.indexOf(item.op.filaId) + 1}`
-                : item.op.tipo;
-            const minimo =
-              item.op.tipo === "SET_CELL" ? minSoportes(estado, hoja, item.op.filaId, item.op.colId) : 0;
-            return (
-              <li key={item.id || donde} className="border border-rule p-2 text-sm">
-                <p className="font-semibold">{donde}</p>
-                <p className="text-ink-soft">{item.op.justificacion || "Sin justificación"}</p>
-                {item.soportes.map((soporte) => (
-                  <a key={soporte.id} className="block underline" href={`/api/soportes/${soporte.id}`}>
-                    {soporte.nombre}
-                  </a>
-                ))}
-                {minimo && item.soportes.length < minimo ? (
-                  <p className="text-xs text-seal">Esta zona exige {minimo} soporte(s). Ábrala con doble clic.</p>
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
-        <label className="mt-3 block text-sm">
-          Resumen del folio
-          <input className="mt-1 w-full border border-rule px-2 py-1" value={resumenFolio} onChange={(event) => setResumenFolio(event.target.value)} />
-        </label>
-        <p className="mt-4 text-sm text-graphite">El revisor autoriza la subida de esta tabla. Las casillas se editan sin esa aprobación.</p>
-        <label className="mt-2 block text-sm">
-          Cédula del revisor
-          <input className="mt-1 w-full border border-rule px-2 py-1" value={cedulaRevisor} onChange={(event) => setCedulaRevisor(event.target.value)} />
-        </label>
-        <label className="mt-3 block text-sm">
-          Contraseña del revisor
-          <input className="mt-1 w-full border border-rule px-2 py-1" type="password" value={passwordRevisor} onChange={(event) => setPasswordRevisor(event.target.value)} />
-        </label>
-        <button type="button" className="mt-3 w-full bg-indigo px-3 py-2 text-white" disabled={lectura || ops.length === 0} onClick={() => void radicar()}>
-          Radicar cambios
-        </button>
-      </aside> : null}
+      {mostrarRadicar && radicarAbierto ? (
+        <div className="popup-velo fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4">
+          <form
+            className={`popup-caja w-full max-w-lg bg-card p-4 ${radicarSale ? "sale" : ""}`}
+            onSubmit={(event) => {
+              event.preventDefault();
+              void radicar();
+            }}
+          >
+            <h2 className="font-display text-2xl">Radicar cambios</h2>
+            <p className="mt-1 text-sm text-ink-soft">{ops.length} cambios sin radicar</p>
+            <ul className="mt-3 max-h-60 space-y-3 overflow-auto">
+              {ops.map((item) => {
+                const donde =
+                  item.op.tipo === "SET_CELL"
+                    ? `${indiceAColumna(hoja.colIds.indexOf(item.op.colId))}${hoja.filaIds.indexOf(item.op.filaId) + 1}`
+                    : item.op.tipo;
+                const minimo = item.op.tipo === "SET_CELL" ? minSoportes(estado, hoja, item.op.filaId, item.op.colId) : 0;
+                return (
+                  <li key={item.id || donde} className="border border-rule p-2 text-sm">
+                    <p className="font-semibold">{donde}</p>
+                    <p className="text-ink-soft">{item.op.justificacion || "Sin justificación"}</p>
+                    {item.soportes.map((soporte) => (
+                      <a key={soporte.id} className="block underline" href={`/api/soportes/${soporte.id}`}>
+                        {soporte.nombre}
+                      </a>
+                    ))}
+                    {minimo && item.soportes.length < minimo ? (
+                      <p className="text-xs text-seal">Esta zona exige {minimo} soporte(s).</p>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+            <label className="mt-3 block text-sm">
+              Resumen del folio
+              <input className="mt-1 w-full border border-rule px-2 py-1" value={resumenFolio} onChange={(event) => setResumenFolio(event.target.value)} />
+            </label>
+            <p className="mt-4 text-sm text-graphite">El revisor autoriza la subida de esta tabla.</p>
+            <label className="mt-2 block text-sm">
+              Cédula del revisor
+              <input className="mt-1 w-full border border-rule px-2 py-1" value={cedulaRevisor} onChange={(event) => setCedulaRevisor(event.target.value)} />
+            </label>
+            <label className="mt-3 block text-sm">
+              Contraseña del revisor
+              <input className="mt-1 w-full border border-rule px-2 py-1" type="password" value={passwordRevisor} onChange={(event) => setPasswordRevisor(event.target.value)} />
+            </label>
+            <div className="mt-3 flex gap-2">
+              <button type="submit" className="bg-indigo px-3 py-2 text-white" disabled={radicarSale}>
+                Radicar cambios
+              </button>
+              <button type="button" className="border border-rule px-3 py-2" onClick={() => setRadicarAbierto(false)}>
+                Cancelar
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
       {propuesta ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4">
           <form
@@ -1107,9 +1140,83 @@ function VistaPorTitulos({
   lectura: boolean;
   onCelda: (fila: number, col: number, valor: string) => void;
 }) {
+  const [consulta, setConsulta] = useState("");
+  const [listaAbierta, setListaAbierta] = useState(false);
+  const [elegida, setElegida] = useState<number | null>(null);
+  const [sugerenciaActiva, setSugerenciaActiva] = useState(0);
+  const columnas = hoja.colIds.map((colId, indice) => ({
+    indice,
+    colId,
+    letra: indiceAColumna(indice),
+    titulo: hoja.celdas[claveCelda(hoja.filaIds[0], colId)]?.valor?.trim() || `Columna ${indiceAColumna(indice)}`,
+  }));
+  const texto = consulta.trim().toLowerCase();
+  const sugerencias = texto
+    ? columnas.filter((columna) => columna.titulo.toLowerCase().includes(texto) || columna.letra.toLowerCase() === texto)
+    : [];
+  const visible = elegida === null ? null : columnas[elegida];
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-      {hoja.colIds.map((colId, c) => {
+    <div>
+      <div className="relative max-w-xl">
+        <label className="block text-sm">
+          Buscar columna
+          <input
+            className="mt-1 w-full border border-rule bg-card px-2 py-1"
+            value={consulta}
+            placeholder="Escriba el título"
+            onChange={(event) => {
+              setConsulta(event.target.value);
+              setElegida(null);
+              setSugerenciaActiva(0);
+              setListaAbierta(true);
+            }}
+            onFocus={() => setListaAbierta(true)}
+            onKeyDown={(event) => {
+              if (!sugerencias.length) return;
+              if (event.key === "ArrowDown") {
+                event.preventDefault();
+                setSugerenciaActiva((actual) => (actual + 1) % sugerencias.length);
+              } else if (event.key === "ArrowUp") {
+                event.preventDefault();
+                setSugerenciaActiva((actual) => (actual - 1 + sugerencias.length) % sugerencias.length);
+              } else if (event.key === "Enter") {
+                event.preventDefault();
+                const columna = sugerencias[sugerenciaActiva] ?? sugerencias[0];
+                if (!columna) return;
+                setElegida(columna.indice);
+                setConsulta(columna.titulo);
+                setListaAbierta(false);
+              }
+            }}
+          />
+        </label>
+        {listaAbierta && sugerencias.length > 0 ? (
+          <ul className="absolute z-20 mt-1 max-h-60 w-full overflow-auto border border-rule bg-card" role="listbox">
+            {sugerencias.map((columna, posicion) => (
+              <li key={columna.colId}>
+                <button
+                  type="button"
+                  className={`block w-full px-3 py-2 text-left text-sm ${posicion === sugerenciaActiva ? "bg-[#e7eef8]" : ""}`}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    setElegida(columna.indice);
+                    setConsulta(columna.titulo);
+                    setListaAbierta(false);
+                  }}
+                >
+                  <span className="font-mono text-xs text-ink-soft">{columna.letra}</span> {columna.titulo}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+      {!visible ? <p className="mt-4 text-sm text-graphite">Escriba un título para abrir solo esa columna.</p> : null}
+      {visible ? (
+    <div className="mt-4 grid gap-4">
+      {columnas.filter((columna) => columna.indice === visible.indice).map((columna) => {
+        const c = columna.indice;
+        const colId = columna.colId;
         const titulo = hoja.celdas[claveCelda(hoja.filaIds[0], colId)]?.valor || "";
         return (
           <article key={colId} className="border border-rule border-t-[3px] border-t-brass bg-card p-4">
@@ -1152,6 +1259,8 @@ function VistaPorTitulos({
           </article>
         );
       })}
+    </div>
+      ) : null}
     </div>
   );
 }

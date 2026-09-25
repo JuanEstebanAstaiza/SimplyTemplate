@@ -121,11 +121,54 @@ label.muestra-color:hover {
   box-shadow: 0 0 0 2px #b38b4d;
 }
 
+@keyframes popup-entra {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes popup-sale {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.98);
+  }
+}
+
+@keyframes velo-entra {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.popup-velo {
+  animation: velo-entra 180ms ease;
+}
+
+.popup-caja {
+  animation: popup-entra 240ms ease;
+}
+
+.popup-caja.sale {
+  animation: popup-sale 240ms ease forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
   button,
   a.bg-indigo,
-  nav a {
+  nav a,
+  .popup-velo,
+  .popup-caja,
+  .popup-caja.sale {
     transition: none;
+    animation: none;
   }
 
   button:hover:not(:disabled),
