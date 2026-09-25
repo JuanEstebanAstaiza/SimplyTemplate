@@ -9,7 +9,7 @@ import type { GrosorBorde } from "@/lib/libro/tipos";
 import { mostrar } from "@/lib/libro/mostrar";
 import { indiceAColumna, desplazarFormula } from "@/lib/libro/refs";
 import { resumir, type Agregacion } from "@/lib/libro/resumen";
-import { claveCelda, type EstadoLibro, type Formato, type Operacion } from "@/lib/libro/tipos";
+import { claveCelda, type EstadoLibro, type Formato, type HojaEstado, type Operacion } from "@/lib/libro/tipos";
 import { hojaVacia } from "@/lib/libro/vacio";
 import { minSoportes } from "@/lib/libro/zonas";
 
@@ -71,6 +71,7 @@ export function EditorHoja({
     setOps(operacionesIniciales);
   }, [estadoInicial, operacionesIniciales]);
   const [hojaIndex, setHojaIndex] = useState(0);
+  const [modoVista, setModoVista] = useState<"hoja" | "titulos">("hoja");
   useEffect(() => {
     const soltar = () => {
       arrastre.current = false;
@@ -159,7 +160,7 @@ export function EditorHoja({
     );
     setFila(f);
     setCol(c);
-    setValorForm(celda?.formula || celda?.valor || "");
+    setValorForm(f === 0 ? celda?.valor || "" : celda?.formula || celda?.valor || "");
     setJustForm(existente && existente.op.tipo === "SET_CELL" ? existente.op.justificacion : "");
     setArchivoForm(null);
     if (limitado && !puedeCasilla(filaId, colId)) {
@@ -447,6 +448,12 @@ export function EditorHoja({
         ) : null}
         {error ? <p className="mb-2 text-sm text-seal">{error}</p> : null}
         <div className="mb-2 flex flex-wrap gap-2">
+          <button type="button" className={`border px-2 py-1 text-sm ${modoVista === "hoja" ? "border-indigo bg-indigo text-white" : "border-rule bg-card"}`} onClick={() => setModoVista("hoja")}>
+            Hoja
+          </button>
+          <button type="button" className={`border px-2 py-1 text-sm ${modoVista === "titulos" ? "border-indigo bg-indigo text-white" : "border-rule bg-card"}`} onClick={() => setModoVista("titulos")}>
+            Por títulos
+          </button>
           {estado.hojas.map((item, index) => (
             <button
               key={item.id}
@@ -605,7 +612,34 @@ export function EditorHoja({
             Tabla resumen
           </button>
         </div>
-        <div className="max-h-[68vh] overflow-auto border border-rule bg-card">
+        {modoVista === "titulos" ? (
+          <VistaPorTitulos
+            hoja={hoja}
+            lectura={lectura}
+            onCelda={(f, c, valor) => {
+              const filaId = hoja.filaIds[f];
+              const colId = hoja.colIds[c];
+              if (!filaId || !colId || !puedeCasilla(filaId, colId)) {
+                setError("Esta casilla no está entre las columnas o filas asignadas a su usuario.");
+                return;
+              }
+              const celda = hoja.celdas[claveCelda(filaId, colId)];
+              void guardar({
+                tipo: "SET_CELL",
+                hojaId: hoja.id,
+                filaId,
+                colId,
+                valor: f === 0 ? valor.replace(/^=/, "") : valor.startsWith("=") ? "" : valor,
+                formula: f === 0 ? "" : valor.startsWith("=") ? valor : "",
+                formato: celda?.formato,
+                negrita: f === 0 ? true : celda?.negrita,
+                relleno: celda?.relleno,
+                justificacion: "",
+              });
+            }}
+          />
+        ) : null}
+        {modoVista === "hoja" ? <div className="max-h-[68vh] overflow-auto border border-rule bg-card">
           <table className="grid-sheet">
             <thead>
               <tr>
@@ -632,7 +666,7 @@ export function EditorHoja({
             </thead>
             <tbody>
               {hoja.filaIds.map((filaId, f) => (
-                <tr key={filaId}>
+                <tr key={filaId} className={f === 0 ? "fila-titulo" : undefined}>
                   <td
                     className="rowhead"
                     onClick={() => {
@@ -694,7 +728,8 @@ export function EditorHoja({
               ))}
             </tbody>
           </table>
-        </div>
+        </div> : null}
+        <p className="mt-2 text-xs text-ink-soft">La primera casilla de cada columna es solo el título. Esas ramas aparecen en Auditoría.</p>
       </div>
       {mostrarRadicar ? <aside className="w-full shrink-0 border border-rule bg-card p-4 lg:w-96">
         <h2 className="font-display text-2xl">Radicar cambios</h2>
@@ -808,8 +843,8 @@ export function EditorHoja({
                   hojaId: hoja.id,
                   filaId,
                   colId,
-                  valor: formula ? "" : valorForm,
-                  formula,
+                  valor: casilla.fila === 0 ? valorForm.replace(/^=/, "") : formula ? "" : valorForm,
+                  formula: casilla.fila === 0 ? "" : formula,
                   formato: celdaActual?.formato,
                   negrita: celdaActual?.negrita,
                   relleno: celdaActual?.relleno,
@@ -825,12 +860,15 @@ export function EditorHoja({
             }}
           >
             <h3 className="font-display text-2xl">
-              Editar {indiceAColumna(casilla.col)}
-              {casilla.fila + 1}
+              {casilla.fila === 0 ? "Título de la columna" : `Editar ${indiceAColumna(casilla.col)}${casilla.fila + 1}`}
             </h3>
             <label className="mt-3 block text-sm">
-              Valor o fórmula
-              <CampoFormula value={valorForm} onChange={setValorForm} />
+              {casilla.fila === 0 ? "Título" : "Valor o fórmula"}
+              {casilla.fila === 0 ? (
+                <input className="mt-1 w-full border border-rule px-2 py-1" value={valorForm} onChange={(event) => setValorForm(event.target.value)} autoFocus />
+              ) : (
+                <CampoFormula value={valorForm} onChange={setValorForm} />
+              )}
             </label>
             <label className="mt-3 block text-sm">
               Nota, si quiere dejarla
@@ -1010,6 +1048,64 @@ function Resumen({
           <button type="button" className="border border-rule px-3 py-2" onClick={onCerrar}>Cerrar</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function VistaPorTitulos({
+  hoja,
+  lectura,
+  onCelda,
+}: {
+  hoja: HojaEstado;
+  lectura: boolean;
+  onCelda: (fila: number, col: number, valor: string) => void;
+}) {
+  return (
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      {hoja.colIds.map((colId, c) => {
+        const titulo = hoja.celdas[claveCelda(hoja.filaIds[0], colId)]?.valor || "";
+        return (
+          <article key={colId} className="border border-rule border-t-[3px] border-t-brass bg-card p-4">
+            <label className="block text-sm">
+              Título de la columna
+              <input
+                className="mt-1 w-full border border-rule bg-paper px-2 py-1 font-display text-lg"
+                defaultValue={titulo}
+                placeholder="Sin título"
+                disabled={lectura}
+                onBlur={(event) => {
+                  if (event.target.value !== titulo) onCelda(0, c, event.target.value);
+                }}
+              />
+            </label>
+            <ul className="mt-3 space-y-2">
+              {hoja.filaIds.slice(1).map((filaId, indice) => {
+                const f = indice + 1;
+                const nombreFila =
+                  c > 0 ? hoja.celdas[claveCelda(filaId, hoja.colIds[0])]?.valor?.trim() : "";
+                const celda = hoja.celdas[claveCelda(filaId, colId)];
+                const valor = celda?.formula || celda?.valor || "";
+                return (
+                  <li key={filaId}>
+                    <label className="block text-sm">
+                      {nombreFila || `Fila ${f + 1}`}
+                      <input
+                        className="mt-1 w-full border border-rule px-2 py-1 font-mono"
+                        defaultValue={valor}
+                        disabled={lectura}
+                        onBlur={(event) => {
+                          if (event.target.value !== valor) onCelda(f, c, event.target.value);
+                        }}
+                      />
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          </article>
+        );
+      })}
     </div>
   );
 }
