@@ -1,7 +1,8 @@
 import ExcelJS from "exceljs";
 import JSZip from "jszip";
 import Papa from "papaparse";
-import { claveCelda, type Celda, type EstadoLibro, type Formato } from "../libro/tipos";
+import { bordeActivo } from "../libro/bordes";
+import { claveCelda, type Borde, type Celda, type EstadoLibro, type Formato, type GrosorBorde } from "../libro/tipos";
 import { hojaVacia } from "../libro/vacio";
 import { columnaAIndice, parsearReferencia } from "../libro/refs";
 
@@ -10,6 +11,27 @@ export type LibroLeido = {
   tieneMacros: boolean;
   tieneTablaDinamica: boolean;
 };
+
+function bordeExcel(border?: Partial<ExcelJS.Borders>): Borde | undefined {
+  if (!border) return undefined;
+  const presente = (lado?: { style?: string }) => Boolean(lado?.style && lado.style !== "none");
+  const arriba = presente(border.top);
+  const derecha = presente(border.right);
+  const abajo = presente(border.bottom);
+  const izquierda = presente(border.left);
+  if (!arriba && !derecha && !abajo && !izquierda) return undefined;
+  const argb = border.top?.color?.argb || border.bottom?.color?.argb || border.left?.color?.argb || border.right?.color?.argb;
+  const estilo = border.top?.style || border.bottom?.style || border.left?.style || border.right?.style;
+  const grosor: GrosorBorde = estilo === "thick" ? "grueso" : estilo === "medium" ? "medio" : "fino";
+  return bordeActivo({
+    arriba,
+    derecha,
+    abajo,
+    izquierda,
+    color: argb && argb.length >= 6 ? `#${argb.slice(-6)}` : "#152238",
+    grosor,
+  });
+}
 
 function formatoDe(numFmt: string | undefined, valor: unknown): Formato | undefined {
   const fmt = numFmt || "";
@@ -64,13 +86,15 @@ export async function leerExcel(buffer: Buffer): Promise<LibroLeido> {
         const negrita = Boolean(cell.font?.bold) || undefined;
         const argb = cell.fill && cell.fill.type === "pattern" ? cell.fill.fgColor?.argb : undefined;
         const relleno = argb && argb.length >= 6 ? `#${argb.slice(-6)}` : undefined;
-        if (!leido.valor && !leido.formula && !negrita && !relleno && !formato) return;
+        const borde = bordeExcel(cell.border);
+        if (!leido.valor && !leido.formula && !negrita && !relleno && !formato && !borde) return;
         const celda: Celda = {
           valor: leido.valor,
           formula: leido.formula || undefined,
           formato,
           negrita,
           relleno,
+          borde,
         };
         hoja.celdas[claveCelda(hoja.filaIds[rowNumber - 1], hoja.colIds[colNumber - 1])] = celda;
       });

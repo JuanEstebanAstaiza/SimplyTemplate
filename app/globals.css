@@ -72,6 +72,72 @@ nav a {
   text-decoration: none;
 }
 
+button,
+a.bg-indigo,
+nav a {
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+button:hover:not(:disabled),
+a.bg-indigo:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(21, 34, 56, 0.14);
+}
+
+button.bg-indigo:hover:not(:disabled),
+a.bg-indigo:hover {
+  background-color: #1c3d68;
+}
+
+nav a:hover {
+  background: rgba(255, 255, 255, 0.12);
+  transform: translateX(4px);
+  box-shadow: none;
+}
+
+nav button:hover:not(:disabled) {
+  transform: translateX(3px);
+  box-shadow: none;
+}
+
+button.muestra-color,
+label.muestra-color {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #dce0e6;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+button.muestra-color:hover:not(:disabled),
+label.muestra-color:hover {
+  transform: scale(1.16);
+  box-shadow: 0 0 0 2px #b38b4d;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button,
+  a.bg-indigo,
+  nav a {
+    transition: none;
+  }
+
+  button:hover:not(:disabled),
+  a.bg-indigo:hover,
+  nav a:hover,
+  nav button:hover:not(:disabled),
+  button.muestra-color:hover:not(:disabled),
+  label.muestra-color:hover {
+    transform: none;
+  }
+}
+
 :focus-visible {
   outline: 2px solid var(--color-indigo);
   outline-offset: 2px;

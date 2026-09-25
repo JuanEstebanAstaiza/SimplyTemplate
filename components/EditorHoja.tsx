@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CampoFormula } from "@/components/CampoFormula";
 import { aplicar, celdaCubierta, extensionAncla } from "@/lib/libro/aplicar";
+import { bordeParaCelda, estiloBorde, type ModoBorde } from "@/lib/libro/bordes";
+import type { GrosorBorde } from "@/lib/libro/tipos";
 import { mostrar } from "@/lib/libro/mostrar";
 import { indiceAColumna, desplazarFormula } from "@/lib/libro/refs";
 import { resumir, type Agregacion } from "@/lib/libro/resumen";
@@ -15,6 +18,8 @@ export type OpVista = {
   op: Operacion;
   soportes: { id: string; nombre: string }[];
 };
+
+const COLORES_TABLA = ["#F3E6C8", "#D6E2F0", "#D7E8DF", "#F6D6D3", "#E4E7EB", "#B38B4D", "#2B4A7A"];
 
 async function postJson(url: string, body: unknown) {
   const respuesta = await fetch(url, {
@@ -89,7 +94,10 @@ export function EditorHoja({
   const [dialogo, setDialogo] = useState<null | { titulo: string; confirmar: (justificacion: string) => void }>(null);
   const [motivo, setMotivo] = useState("");
   const [resumenAbierto, setResumenAbierto] = useState(false);
-  const [password, setPassword] = useState("");
+  const [colorBorde, setColorBorde] = useState("#152238");
+  const [grosorBorde, setGrosorBorde] = useState<GrosorBorde>("fino");
+  const [cedulaRevisor, setCedulaRevisor] = useState("");
+  const [passwordRevisor, setPasswordRevisor] = useState("");
   const [resumenFolio, setResumenFolio] = useState("");
   const hoja = estado.hojas[hojaIndex] ?? estado.hojas[0];
 
@@ -316,6 +324,64 @@ export function EditorHoja({
     void guardar(op);
   }
 
+  async function pintar(relleno?: string) {
+    if (!hoja || lectura) return;
+    const { f1, c1, f2, c2 } = rango();
+    let aplicadas = 0;
+    for (let f = f1; f <= f2; f++) {
+      for (let c = c1; c <= c2; c++) {
+        const filaId = hoja.filaIds[f];
+        const colId = hoja.colIds[c];
+        if (!filaId || !colId || celdaCubierta(hoja, filaId, colId) || !puedeCasilla(filaId, colId)) continue;
+        const celda = hoja.celdas[claveCelda(filaId, colId)];
+        await guardar({
+          tipo: "SET_CELL",
+          hojaId: hoja.id,
+          filaId,
+          colId,
+          valor: celda?.valor ?? "",
+          formula: celda?.formula ?? "",
+          formato: celda?.formato,
+          negrita: celda?.negrita,
+          relleno,
+          justificacion: "Se aplica un color de relleno a la casilla.",
+        });
+        aplicadas += 1;
+      }
+    }
+    if (!aplicadas) setError("No hay celdas de la selección que pueda colorear.");
+  }
+
+  async function trazar(modo: ModoBorde) {
+    if (!hoja || lectura) return;
+    const { f1, c1, f2, c2 } = rango();
+    let aplicadas = 0;
+    for (let f = f1; f <= f2; f++) {
+      for (let c = c1; c <= c2; c++) {
+        const filaId = hoja.filaIds[f];
+        const colId = hoja.colIds[c];
+        if (!filaId || !colId || celdaCubierta(hoja, filaId, colId) || !puedeCasilla(filaId, colId)) continue;
+        const celda = hoja.celdas[claveCelda(filaId, colId)];
+        const borde = bordeParaCelda(celda?.borde, modo, { fila: f, col: c, f1, c1, f2, c2 }, colorBorde, grosorBorde);
+        await guardar({
+          tipo: "SET_CELL",
+          hojaId: hoja.id,
+          filaId,
+          colId,
+          valor: celda?.valor ?? "",
+          formula: celda?.formula ?? "",
+          formato: celda?.formato,
+          negrita: celda?.negrita,
+          relleno: celda?.relleno,
+          borde: borde ?? null,
+          justificacion: "Se aplica un borde a la casilla.",
+        });
+        aplicadas += 1;
+      }
+    }
+    if (!aplicadas) setError("No hay celdas de la selección a las que pueda poner borde.");
+  }
+
   async function subirSoporte(id: string, archivo: File) {
     const form = new FormData();
     form.set("opId", id);
@@ -334,9 +400,14 @@ export function EditorHoja({
 
   async function radicar() {
     try {
-      await postJson(`/api/plantillas/${plantillaId}/radicar`, { password, resumen: resumenFolio });
+      await postJson(`/api/plantillas/${plantillaId}/radicar`, {
+        cedulaRevisor,
+        passwordRevisor,
+        resumen: resumenFolio,
+      });
       router.refresh();
-      setPassword("");
+      setCedulaRevisor("");
+      setPasswordRevisor("");
       setOps([]);
     } catch (causa) {
       setError(causa instanceof Error ? causa.message : "No se pudo radicar.");
@@ -398,6 +469,72 @@ export function EditorHoja({
           {(["texto", "numero", "porcentaje", "moneda", "fecha"] as Formato[]).map((formato) => (
             <button key={formato} type="button" className="border border-rule bg-card px-2 py-1 capitalize" disabled={lectura} onClick={() => cambiarFormato(formato)}>{formato}</button>
           ))}
+          <span className="inline-flex items-center gap-1">
+            {COLORES_TABLA.map((color) => (
+              <button
+                key={color}
+                type="button"
+                className="muestra-color"
+                style={{ background: color }}
+                aria-label={`Aplicar color ${color}`}
+                disabled={lectura}
+                onClick={() => void pintar(color)}
+              />
+            ))}
+            <label className="muestra-color relative overflow-hidden" style={{ background: "conic-gradient(#b38b4d, #2b4a7a, #2f6b4f, #a23b3b, #b38b4d)" }} title="Otro color">
+              <span className="sr-only">Otro color</span>
+              <input
+                type="color"
+                aria-label="Elegir otro color"
+                disabled={lectura}
+                className="absolute inset-0 cursor-pointer opacity-0"
+                onChange={(event) => void pintar(event.target.value)}
+              />
+            </label>
+            <button type="button" className="border border-rule bg-card px-2 py-1" disabled={lectura} onClick={() => void pintar(undefined)}>
+              Quitar color
+            </button>
+          </span>
+          <span className="inline-flex flex-wrap items-center gap-1">
+            <select
+              aria-label="Grosor del borde"
+              className="border border-rule bg-card px-1 py-1"
+              value={grosorBorde}
+              disabled={lectura}
+              onChange={(event) => setGrosorBorde(event.target.value as GrosorBorde)}
+            >
+              <option value="fino">Fino</option>
+              <option value="medio">Medio</option>
+              <option value="grueso">Grueso</option>
+            </select>
+            <label className="muestra-color relative overflow-hidden" style={{ background: colorBorde }} title="Color del borde">
+              <span className="sr-only">Color del borde</span>
+              <input
+                type="color"
+                aria-label="Color del borde"
+                value={colorBorde}
+                disabled={lectura}
+                className="absolute inset-0 cursor-pointer opacity-0"
+                onChange={(event) => setColorBorde(event.target.value)}
+              />
+            </label>
+            {(
+              [
+                ["todos", "Todos"],
+                ["contorno", "Contorno"],
+                ["interior", "Interior"],
+                ["arriba", "Superior"],
+                ["abajo", "Inferior"],
+                ["izquierda", "Izquierdo"],
+                ["derecha", "Derecho"],
+                ["quitar", "Quitar bordes"],
+              ] as [ModoBorde, string][]
+            ).map(([modo, etiqueta]) => (
+              <button key={modo} type="button" className="border border-rule bg-card px-2 py-1" disabled={lectura} onClick={() => void trazar(modo)}>
+                {etiqueta}
+              </button>
+            ))}
+          </span>
           <button type="button" className="border border-rule bg-card px-2 py-1" disabled={lectura} onClick={combinar}>
             Combinar celdas
           </button>
@@ -527,7 +664,7 @@ export function EditorHoja({
                         rowSpan={extension?.filas}
                         colSpan={extension?.columnas}
                         className={`${dentro ? "selected" : ""} ${marcada ? "draft" : ""} ${zona ? "zone" : ""} ${ajena ? "ajena" : ""}`}
-                        style={{ fontWeight: celda?.negrita ? 700 : 400, background: celda?.relleno }}
+                        style={{ fontWeight: celda?.negrita ? 700 : 400, background: celda?.relleno, ...estiloBorde(celda?.borde) }}
                         title={celda?.formula && celda.formula.startsWith("=") ? celda.formula : undefined}
                         onMouseDown={(event) => {
                           if (event.button !== 0) return;
@@ -590,9 +727,14 @@ export function EditorHoja({
           Resumen del folio
           <input className="mt-1 w-full border border-rule px-2 py-1" value={resumenFolio} onChange={(event) => setResumenFolio(event.target.value)} />
         </label>
+        <p className="mt-4 text-sm text-graphite">El revisor autoriza la subida de esta tabla. Las casillas se editan sin esa aprobación.</p>
+        <label className="mt-2 block text-sm">
+          Cédula del revisor
+          <input className="mt-1 w-full border border-rule px-2 py-1" value={cedulaRevisor} onChange={(event) => setCedulaRevisor(event.target.value)} />
+        </label>
         <label className="mt-3 block text-sm">
-          Contraseña para la constancia
-          <input className="mt-1 w-full border border-rule px-2 py-1" type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
+          Contraseña del revisor
+          <input className="mt-1 w-full border border-rule px-2 py-1" type="password" value={passwordRevisor} onChange={(event) => setPasswordRevisor(event.target.value)} />
         </label>
         <button type="button" className="mt-3 w-full bg-indigo px-3 py-2 text-white" disabled={lectura || ops.length === 0} onClick={() => void radicar()}>
           Radicar cambios
@@ -658,10 +800,6 @@ export function EditorHoja({
               const filaId = hoja.filaIds[casilla.fila];
               const colId = hoja.colIds[casilla.col];
               if (!filaId || !colId) return;
-              if (justForm.trim().length < 20) {
-                setError("La justificación debe tener al menos 20 caracteres.");
-                return;
-              }
               const celdaActual = hoja.celdas[claveCelda(filaId, colId)];
               const formula = valorForm.startsWith("=") ? valorForm : "";
               void (async () => {
@@ -692,18 +830,13 @@ export function EditorHoja({
             </h3>
             <label className="mt-3 block text-sm">
               Valor o fórmula
-              <input
-                className="mt-1 w-full border border-rule px-2 py-1 font-mono"
-                value={valorForm}
-                onChange={(event) => setValorForm(event.target.value)}
-                autoFocus
-              />
+              <CampoFormula value={valorForm} onChange={setValorForm} />
             </label>
             <label className="mt-3 block text-sm">
-              Por qué cambia
+              Nota, si quiere dejarla
               <textarea
                 className="mt-1 w-full border border-rule p-2"
-                rows={4}
+                rows={2}
                 value={justForm}
                 onChange={(event) => setJustForm(event.target.value)}
               />

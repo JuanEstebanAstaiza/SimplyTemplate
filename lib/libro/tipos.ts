@@ -1,11 +1,23 @@
 export type Formato = "texto" | "numero" | "porcentaje" | "moneda" | "fecha";
 
+export type GrosorBorde = "fino" | "medio" | "grueso";
+
+export type Borde = {
+  arriba?: boolean;
+  derecha?: boolean;
+  abajo?: boolean;
+  izquierda?: boolean;
+  color?: string;
+  grosor?: GrosorBorde;
+};
+
 export type Celda = {
   valor: string;
   formula?: string;
   formato?: Formato;
   negrita?: boolean;
   relleno?: string;
+  borde?: Borde;
 };
 
 export type Combinada = {
@@ -56,6 +68,7 @@ export type Operacion =
       formato?: Formato;
       negrita?: boolean;
       relleno?: string;
+      borde?: Borde | null;
       justificacion: string;
     }
   | {

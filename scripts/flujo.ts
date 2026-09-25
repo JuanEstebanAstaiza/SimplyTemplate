@@ -35,7 +35,8 @@ async function main() {
     formato: "porcentaje",
     justificacion,
   });
-  await assert.rejects(() => radicar(plantilla.id, editor, clave, "Corte del trimestre"), /soporte/i);
+  const accesoRevisor = { cedula: "1000000003", password: clave };
+  await assert.rejects(() => radicar(plantilla.id, editor, "Corte del trimestre", accesoRevisor), /soporte/i);
 
   const op = await prisma.borradorOperacion.findFirstOrThrow({
     where: { borrador: { plantillaId: plantilla.id, autorId: editor.id }, tipo: "SET_CELL" },
@@ -52,7 +53,7 @@ async function main() {
       subidoPorId: editor.id,
     },
   });
-  await radicar(plantilla.id, editor, clave, "Corte del trimestre");
+  await radicar(plantilla.id, editor, "Corte del trimestre", accesoRevisor);
 
   const aviso = await prisma.aviso.findFirstOrThrow({
     where: { actorId: editor.id, texto: { contains: "1 casilla" } },

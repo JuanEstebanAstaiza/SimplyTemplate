@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Prisma, type Usuario } from "@prisma/client";
-import { contarCasillas, textoContrafirma, textoContrafirmaPendiente, textoDevolucion, textoRadicacion } from "../avisos/texto";
+import { contarCasillas, textoContrafirma, textoDevolucion, textoRadicacion } from "../avisos/texto";
 import { puede, type Rol } from "../authz";
 import { prisma } from "../db";
 import { AccionError } from "../errores";
@@ -12,7 +12,7 @@ import type { EstadoLibro, Operacion } from "../libro/tipos";
 import { libroVacio } from "../libro/vacio";
 import { minSoportes } from "../libro/zonas";
 import { guardarEstado, guardarFirma, leerEstado, sellarFirma } from "../storage";
-import { justificacionSchema } from "../validacion";
+import { cedulaSchema, justificacionSchema } from "../validacion";
 import { dentroDeVigencia } from "../vigencia";
 
 const TIPOS = new Set([
@@ -381,9 +381,19 @@ export async function descartarBorrador(plantillaId: string, autorId: string) {
   await prisma.borrador.deleteMany({ where: { plantillaId, autorId } });
 }
 
-export async function radicar(plantillaId: string, autor: Usuario, password: string, resumen: string) {
+export async function radicar(
+  plantillaId: string,
+  autor: Usuario,
+  resumen: string,
+  accesoRevisor: { cedula: string; password: string },
+) {
   await repararFirmas();
-  await claveValida(autor, password);
+  const cedulaRevisor = cedulaSchema.parse(accesoRevisor.cedula || "");
+  const revisor = await prisma.usuario.findUnique({ where: { cedula: cedulaRevisor } });
+  if (!revisor || !revisor.activo || !puede(revisor.rol, "contrafirmar")) {
+    throw new AccionError("La cédula no corresponde a un revisor activo.");
+  }
+  await claveValida(revisor, accesoRevisor.password || "");
   const plantilla = await prisma.plantilla.findUnique({ where: { id: plantillaId } });
   if (!plantilla) throw new AccionError("La plantilla no existe.", 404);
   asegurarEdicion(plantilla, autor.rol);
@@ -400,7 +410,7 @@ export async function radicar(plantillaId: string, autor: Usuario, password: str
   let cursor = base;
   for (const op of ops) {
     await assertAsignacion(autor, plantillaId, op);
-    justificacionSchema.parse(op.justificacion);
+    if (op.tipo !== "SET_CELL") justificacionSchema.parse(op.justificacion);
     cursor = aplicar(cursor, op);
   }
   for (let i = 0; i < ops.length; i++) {
@@ -428,19 +438,47 @@ export async function radicar(plantillaId: string, autor: Usuario, password: str
     padreId: padre?.id ?? null,
     numero,
     hashAnterior: padre?.hashFolio ?? GENESIS,
-    pendiente: plantilla.exigeContrafirma,
+    pendiente: false,
+  });
+  const folio = await prisma.folio.findUniqueOrThrow({ where: { id: resultado.folioId } });
+  const mongoId = await guardarFirma({
+    folioId: folio.id,
+    plantillaId,
+    numero: folio.numero,
+    firmante: {
+      usuarioId: revisor.id,
+      cedula: revisor.cedula,
+      nombre: revisor.nombre,
+      cargo: revisor.cargo,
+      dependencia: revisor.dependencia,
+      rolFirma: "CONTRAFIRMA",
+    },
+    metodo: "CLAVE",
+    hashFolio: folio.hashFolio,
+    hashEstado: folio.hashEstado,
+    hashAnterior: folio.hashAnterior,
+    firmadoEn: new Date().toISOString(),
+    sellada: true,
+  });
+  await prisma.firmaRef.create({
+    data: {
+      folioId: folio.id,
+      usuarioId: revisor.id,
+      rolFirma: "CONTRAFIRMA",
+      mongoId,
+      hashFirmado: folio.hashFolio,
+      sellada: true,
+    },
   });
   await prisma.borrador.delete({ where: { id: borrador.id } });
   const cuenta = contarCasillas(ops);
   await prisma.$transaction((tx) =>
     publicar(tx, {
-      tipo: plantilla.exigeContrafirma ? "CONTRAFIRMA_PENDIENTE" : "RADICACION",
+      tipo: "RADICACION",
       actorId: autor.id,
       plantillaId,
       folioId: resultado.folioId,
-      texto: plantilla.exigeContrafirma
-        ? textoContrafirmaPendiente(autor.nombre, plantilla.nombre)
-        : textoRadicacion(autor.nombre, cuenta.cambios, cuenta.casillas, plantilla.nombre),
+      texto: `${textoRadicacion(autor.nombre, cuenta.cambios, cuenta.casillas, plantilla.nombre)} ${revisor.nombre} autorizó la subida.`,
       cambios: cuenta.cambios,
       casillas: cuenta.casillas,
     }),

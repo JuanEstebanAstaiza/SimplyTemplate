@@ -37,6 +37,18 @@ export async function escribirExcel(estado: EstadoLibro, trazabilidad: string[][
         if (celda.relleno) {
           cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: `FF${celda.relleno.replace("#", "")}` } };
         }
+        if (celda.borde) {
+          const estilo: "thin" | "medium" | "thick" =
+            celda.borde.grosor === "grueso" ? "thick" : celda.borde.grosor === "medio" ? "medium" : "thin";
+          const color = { argb: `FF${(celda.borde.color || "#152238").replace("#", "")}` };
+          const lado = (activo?: boolean) => (activo ? { style: estilo, color } : undefined);
+          cell.border = {
+            top: lado(celda.borde.arriba),
+            right: lado(celda.borde.derecha),
+            bottom: lado(celda.borde.abajo),
+            left: lado(celda.borde.izquierda),
+          };
+        }
         if (celda.formato === "porcentaje") cell.numFmt = "0.00%";
         if (celda.formato === "moneda") cell.numFmt = '"$"#,##0';
         if (celda.formato === "fecha") cell.numFmt = "yyyy-mm-dd";

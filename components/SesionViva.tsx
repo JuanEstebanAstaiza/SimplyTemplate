@@ -33,15 +33,20 @@ export function SesionViva({
     let activo = true;
     let ultimo = new Date().toISOString();
     const cargar = async (anunciar: boolean) => {
-      const respuesta = await fetch(`/api/avisos?desde=${encodeURIComponent(ultimo)}`, { cache: "no-store" });
-      if (!respuesta.ok) return;
-      const data = (await respuesta.json()) as { recientes: Aviso[]; nuevos: Aviso[]; noLeidos: number };
-      if (!activo) return;
-      setLista(data.recientes);
-      setNoLeidos(data.noLeidos);
-      if (anunciar && data.nuevos.length) {
-        setToasts((prev) => [...prev, ...data.nuevos].slice(-4));
-        ultimo = data.nuevos[data.nuevos.length - 1].creadoEn;
+      try {
+        const respuesta = await fetch(`/api/avisos?desde=${encodeURIComponent(ultimo)}`, { cache: "no-store" });
+        if (!respuesta.ok || !activo) return;
+        const data = (await respuesta.json()) as { recientes?: Aviso[]; nuevos?: Aviso[]; noLeidos?: number };
+        if (!activo) return;
+        setLista(data.recientes ?? []);
+        setNoLeidos(data.noLeidos ?? 0);
+        const nuevos = data.nuevos ?? [];
+        if (anunciar && nuevos.length) {
+          setToasts((prev) => [...prev, ...nuevos].slice(-4));
+          ultimo = nuevos[nuevos.length - 1].creadoEn;
+        }
+      } catch {
+        // El servidor puede estar reiniciando. El siguiente intento vuelve a consultar.
       }
     };
     void cargar(false);
@@ -74,7 +79,7 @@ export function SesionViva({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ estado, plantillaId }),
-      });
+      }).catch(() => undefined);
     };
     latir();
     const timer = setInterval(latir, 25000);
@@ -103,7 +108,7 @@ export function SesionViva({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ids }),
       cache: "no-store",
-    });
+    }).catch(() => undefined);
   }
 
   function cerrar(id: string) {

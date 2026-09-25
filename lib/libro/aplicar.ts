@@ -1,4 +1,5 @@
 import { evaluarFormula, formulaSoportada } from "./formulas";
+import { bordeActivo } from "./bordes";
 import { claveCelda, type Celda, type EstadoLibro, type HojaEstado, type Operacion } from "./tipos";
 
 function clonar<T>(valor: T): T {
@@ -174,14 +175,17 @@ export function aplicar(estado: EstadoLibro, op: Operacion): EstadoLibro {
     throw new Error("Esa casilla está cubierta por una combinación. Edite la celda ancla.");
   }
   const key = claveCelda(op.filaId, op.colId);
+  const previa = hoja.celdas[key];
+  const borde = op.borde === null ? undefined : bordeActivo(op.borde ?? previa?.borde);
   const celda: Celda = {
     valor: op.valor,
     formula: op.formula || undefined,
     formato: op.formato,
     negrita: op.negrita || undefined,
     relleno: op.relleno || undefined,
+    borde,
   };
-  if (!celda.valor && !celda.formula && !celda.formato && !celda.negrita && !celda.relleno) {
+  if (!celda.valor && !celda.formula && !celda.formato && !celda.negrita && !celda.relleno && !celda.borde) {
     delete hoja.celdas[key];
   } else {
     hoja.celdas[key] = celda;

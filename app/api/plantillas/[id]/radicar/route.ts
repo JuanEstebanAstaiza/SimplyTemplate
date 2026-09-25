@@ -7,8 +7,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   return conError(async () => {
     const autor = await conUsuario();
     const { id } = await context.params;
-    const body = (await request.json()) as { password?: string; resumen?: string };
-    const resultado = await radicar(id, autor, body.password || "", body.resumen || "");
+    const body = (await request.json()) as { cedulaRevisor?: string; passwordRevisor?: string; resumen?: string };
+    const resultado = await radicar(id, autor, body.resumen || "", {
+      cedula: body.cedulaRevisor || "",
+      password: body.passwordRevisor || "",
+    });
     return NextResponse.json(resultado);
   });
 }
