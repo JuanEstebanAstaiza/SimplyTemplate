@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { eventoAAtajo, mapaEfectivo, type IdAtajo } from "@/lib/atajos";
 import { CampoFormula } from "@/components/CampoFormula";
 import { aplicar, celdaCubierta, extensionAncla } from "@/lib/libro/aplicar";
 import { bordeParaCelda, estiloBorde, type ModoBorde } from "@/lib/libro/bordes";
@@ -46,6 +47,7 @@ export function EditorHoja({
   limitado = false,
   funcionarios = [],
   asignaciones = [],
+  atajosInicial,
 }: {
   plantillaId: string;
   estadoInicial: EstadoLibro;
@@ -60,8 +62,10 @@ export function EditorHoja({
   limitado?: boolean;
   funcionarios?: { id: string; nombre: string }[];
   asignaciones?: { hojaId: string; eje: string; refId: string; usuario: string; propia: boolean }[];
+  atajosInicial?: unknown;
 }) {
   const router = useRouter();
+  const mapa = useMemo(() => mapaEfectivo(atajosInicial), [atajosInicial]);
   const [estado, setEstado] = useState(estadoInicial);
   const [ops, setOps] = useState(operacionesIniciales);
   const vistaRef = useRef(estadoInicial);
@@ -415,6 +419,44 @@ export function EditorHoja({
     }
   }
 
+  useEffect(() => {
+    if (lectura) return;
+    const alPulsar = (event: KeyboardEvent) => {
+      const destino = event.target as HTMLElement | null;
+      const etiqueta = destino?.tagName;
+      if (etiqueta === "INPUT" || etiqueta === "TEXTAREA" || etiqueta === "SELECT" || destino?.isContentEditable) return;
+      if (casilla || propuesta || dialogo || resumenAbierto) return;
+      const combo = eventoAAtajo(event);
+      const accion = (Object.keys(mapa) as IdAtajo[]).find((id) => mapa[id] === combo);
+      if (!accion) return;
+      event.preventDefault();
+      if (accion === "negrita") cambiarFormato(seleccion?.celda?.formato || "texto", !seleccion?.celda?.negrita);
+      else if (accion === "texto") cambiarFormato("texto");
+      else if (accion === "numero") cambiarFormato("numero");
+      else if (accion === "porcentaje") cambiarFormato("porcentaje");
+      else if (accion === "moneda") cambiarFormato("moneda");
+      else if (accion === "fecha") cambiarFormato("fecha");
+      else if (accion === "combinar") combinar();
+      else if (accion === "separar") {
+        const { f1, c1 } = rango();
+        void guardar({
+          tipo: "UNMERGE",
+          hojaId: hoja!.id,
+          filaId: hoja!.filaIds[f1],
+          colId: hoja!.colIds[c1],
+          justificacion: "Se separan las celdas combinadas de la plantilla.",
+        });
+      } else if (accion === "insertar-fila") void insertar("FILA");
+      else if (accion === "insertar-columna") void insertar("COLUMNA");
+      else if (accion === "quitar-color") void pintar();
+      else if (accion === "bordes-todos") void trazar("todos");
+      else if (accion === "quitar-bordes") void trazar("quitar");
+      else if (accion === "por-titulos") setModoVista((vista) => (vista === "titulos" ? "hoja" : "titulos"));
+    };
+    window.addEventListener("keydown", alPulsar);
+    return () => window.removeEventListener("keydown", alPulsar);
+  });
+
   if (!hoja) return null;
   const formulaBarra = seleccion?.celda?.formula || seleccion?.celda?.valor || "";
 
@@ -472,9 +514,13 @@ export function EditorHoja({
           </div>
         </div>
         <div className="mb-2 flex flex-wrap gap-2 text-sm">
-          <button type="button" className="border border-rule bg-card px-2 py-1" disabled={lectura} onClick={() => cambiarFormato(seleccion?.celda?.formato || "texto", !seleccion?.celda?.negrita)}>Negrita</button>
+          <button type="button" className="border border-rule bg-card px-2 py-1" disabled={lectura} onClick={() => cambiarFormato(seleccion?.celda?.formato || "texto", !seleccion?.celda?.negrita)}>
+            Negrita <kbd className="font-mono text-[10px] opacity-70">{mapa.negrita}</kbd>
+          </button>
           {(["texto", "numero", "porcentaje", "moneda", "fecha"] as Formato[]).map((formato) => (
-            <button key={formato} type="button" className="border border-rule bg-card px-2 py-1 capitalize" disabled={lectura} onClick={() => cambiarFormato(formato)}>{formato}</button>
+            <button key={formato} type="button" className="border border-rule bg-card px-2 py-1 capitalize" disabled={lectura} onClick={() => cambiarFormato(formato)}>
+              {formato} <kbd className="font-mono text-[10px] opacity-70">{mapa[formato]}</kbd>
+            </button>
           ))}
           <span className="inline-flex items-center gap-1">
             {COLORES_TABLA.map((color) => (

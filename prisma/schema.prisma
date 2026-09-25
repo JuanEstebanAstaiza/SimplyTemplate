@@ -73,6 +73,7 @@ model Usuario {
   rol          Rol
   passwordHash String
   fotoId       String?
+  atajos       Json?
   activo       Boolean  @default(true)
   creadoEn     DateTime @default(now())
 }

@@ -84,6 +84,7 @@ export default async function PlantillaPage({ params }: { params: Promise<{ id: 
         esAdmin={usuario.rol === "ADMINISTRADOR"}
         limitado={limitado}
         funcionarios={funcionarios.map((persona) => ({ id: persona.id, nombre: persona.nombre }))}
+        atajosInicial={usuario.atajos}
         asignaciones={asignaciones.map((item) => ({
           hojaId: item.hojaId,
           eje: item.eje,
