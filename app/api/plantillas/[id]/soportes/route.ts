@@ -22,31 +22,35 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const { id } = await context.params;
     const form = await request.formData();
     const opId = String(form.get("opId") || "");
-    const archivo = form.get("archivo");
-    if (!(archivo instanceof File) || !opId) throw new AccionError("Anexe un archivo al cambio.");
-    const extension = archivo.name.toLowerCase();
-    const extensionValida = [".pdf", ".jpg", ".jpeg", ".png", ".webp", ".csv", ".docx", ".xlsx", ".xlsm"].some((item) =>
-      extension.endsWith(item),
-    );
-    if (!extensionValida && !PERMITIDOS.has(archivo.type)) throw new AccionError("Ese tipo de archivo no se puede anexar.");
-    if (archivo.size > Number(process.env.MAX_UPLOAD_BYTES || 15_728_640)) throw new AccionError("El soporte supera el tamaño permitido.");
+    const archivos = form.getAll("archivo").filter((item): item is File => item instanceof File && item.size > 0);
+    if (!archivos.length || !opId) throw new AccionError("Anexe uno o más archivos al cambio.");
     const operacion = await prisma.borradorOperacion.findFirst({
       where: { id: opId, borrador: { plantillaId: id, autorId: autor.id } },
     });
     if (!operacion) throw new AccionError("El cambio no está en su borrador.");
-    const buffer = Buffer.from(await archivo.arrayBuffer());
-    const guardado = await guardarBinario(archivo.name, archivo.type || "application/octet-stream", buffer);
-    const soporte = await prisma.soporteMeta.create({
-      data: {
-        borradorOpId: operacion.id,
-        nombreOriginal: archivo.name,
-        mime: archivo.type || "application/octet-stream",
-        bytes: archivo.size,
-        sha256: guardado.sha256,
-        gridfsId: guardado.id,
-        subidoPorId: autor.id,
-      },
-    });
-    return NextResponse.json({ soporte: { id: soporte.id, nombre: soporte.nombreOriginal } });
+    const soportes = [];
+    for (const archivo of archivos) {
+      const extension = archivo.name.toLowerCase();
+      const extensionValida = [".pdf", ".jpg", ".jpeg", ".png", ".webp", ".csv", ".docx", ".xlsx", ".xlsm"].some((item) =>
+        extension.endsWith(item),
+      );
+      if (!extensionValida && !PERMITIDOS.has(archivo.type)) throw new AccionError("Ese tipo de archivo no se puede anexar.");
+      if (archivo.size > Number(process.env.MAX_UPLOAD_BYTES || 15_728_640)) throw new AccionError("Un soporte supera el tamaño permitido.");
+      const buffer = Buffer.from(await archivo.arrayBuffer());
+      const guardado = await guardarBinario(archivo.name, archivo.type || "application/octet-stream", buffer);
+      const soporte = await prisma.soporteMeta.create({
+        data: {
+          borradorOpId: operacion.id,
+          nombreOriginal: archivo.name,
+          mime: archivo.type || "application/octet-stream",
+          bytes: archivo.size,
+          sha256: guardado.sha256,
+          gridfsId: guardado.id,
+          subidoPorId: autor.id,
+        },
+      });
+      soportes.push({ id: soporte.id, nombre: soporte.nombreOriginal });
+    }
+    return NextResponse.json({ soporte: soportes[0], soportes });
   });
 }

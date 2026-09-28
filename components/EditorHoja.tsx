@@ -94,7 +94,7 @@ export function EditorHoja({
   const [casilla, setCasilla] = useState<null | { fila: number; col: number }>(null);
   const [valorForm, setValorForm] = useState("");
   const [justForm, setJustForm] = useState("");
-  const [archivoForm, setArchivoForm] = useState<File | null>(null);
+  const [archivosForm, setArchivosForm] = useState<File[]>([]);
   const [error, setError] = useState("");
   const [dialogo, setDialogo] = useState<null | { titulo: string; confirmar: (justificacion: string) => void }>(null);
   const [motivo, setMotivo] = useState("");
@@ -168,7 +168,7 @@ export function EditorHoja({
     setCol(c);
     setValorForm(f === 0 ? celda?.valor || "" : celda?.formula || celda?.valor || "");
     setJustForm(existente && existente.op.tipo === "SET_CELL" ? existente.op.justificacion : "");
-    setArchivoForm(null);
+    setArchivosForm([]);
     if (limitado && !puedeCasilla(filaId, colId)) {
       setError("Esta casilla no está entre las columnas o filas asignadas a su usuario.");
       return;
@@ -819,7 +819,7 @@ export function EditorHoja({
                     <p className="font-semibold">{donde}</p>
                     <p className="text-ink-soft">{item.op.justificacion || "Sin justificación"}</p>
                     {item.soportes.map((soporte) => (
-                      <a key={soporte.id} className="block underline" href={`/api/soportes/${soporte.id}`}>
+                      <a key={soporte.id} className="block underline" href={`/api/soportes/${soporte.id}?ver=1`} target="_blank" rel="noreferrer">
                         {soporte.nombre}
                       </a>
                     ))}
@@ -930,8 +930,8 @@ export function EditorHoja({
                   justificacion: justForm.trim(),
                 });
                 if (!id) return;
-                if (archivoForm) {
-                  const anexo = await subirSoporte(id, archivoForm);
+                for (const archivo of archivosForm) {
+                  const anexo = await subirSoporte(id, archivo);
                   if (!anexo) return;
                 }
                 setCasilla(null);
@@ -959,13 +959,44 @@ export function EditorHoja({
               />
             </label>
             <label className="mt-3 block text-sm">
-              Soporte
+              Soportes
               <input
                 className="mt-1 block"
                 type="file"
-                onChange={(event) => setArchivoForm(event.target.files?.[0] ?? null)}
+                multiple
+                onChange={(event) => {
+                  const nuevos = Array.from(event.target.files ?? []);
+                  setArchivosForm((actual) => [...actual, ...nuevos]);
+                  event.target.value = "";
+                }}
               />
             </label>
+            <ul className="mt-2 space-y-1 text-sm">
+              {(ops.find(
+                (item) =>
+                  item.op.tipo === "SET_CELL" &&
+                  item.op.filaId === hoja.filaIds[casilla.fila] &&
+                  item.op.colId === hoja.colIds[casilla.col],
+              )?.soportes ?? []).map((soporte) => (
+                <li key={soporte.id}>
+                  <a className="underline" href={`/api/soportes/${soporte.id}?ver=1`} target="_blank" rel="noreferrer">
+                    {soporte.nombre}
+                  </a>
+                </li>
+              ))}
+              {archivosForm.map((archivo, indice) => (
+                <li key={`${archivo.name}-${indice}`} className="flex items-center justify-between gap-2">
+                  <span>{archivo.name}</span>
+                  <button
+                    type="button"
+                    className="text-xs underline"
+                    onClick={() => setArchivosForm((actual) => actual.filter((_, i) => i !== indice))}
+                  >
+                    Quitar
+                  </button>
+                </li>
+              ))}
+            </ul>
             {minSoportes(estado, hoja, hoja.filaIds[casilla.fila], hoja.colIds[casilla.col]) > 0 ? (
               <p className="mt-2 text-xs text-seal">Esta zona exige soporte para radicar el cambio.</p>
             ) : null}

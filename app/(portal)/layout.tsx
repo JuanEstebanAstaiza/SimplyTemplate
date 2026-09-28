@@ -19,6 +19,7 @@ export default async function PortalLayout({ children }: { children: React.React
     ["/", "Inicio"],
     ["/plantillas/nueva", "Nueva plantilla"],
     ["/auditoria", "Auditoría"],
+    ["/documentos", "Gestión documental"],
     ...(puede(usuario.rol, "presencia") ? [["/presencia", "Presencia"]] : []),
     ...(puede(usuario.rol, "usuarios") ? [["/usuarios", "Funcionarios"]] : []),
     ["/configuracion", "Configuración rápida"],

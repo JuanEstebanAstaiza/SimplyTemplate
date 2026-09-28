@@ -58,6 +58,9 @@ export default async function PlantillaPage({ params }: { params: Promise<{ id: 
           <Link className="underline" href={`/plantillas/${id}/historial`}>
             Historial de folios
           </Link>
+          <Link className="underline" href={`/documentos/${id}`}>
+            Documentos
+          </Link>
           <a className="underline" href={`/api/plantillas/${id}/export?formato=xlsx`}>
             Exportar xlsx
           </a>
